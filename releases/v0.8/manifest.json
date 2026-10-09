@@ -1,0 +1,16 @@
+{
+  "version": "0.8",
+  "verified_by_user": "2026-10-10",
+  "input_mode": "native macOS",
+  "source_entry": "Sources/WorkspaceDemo.swift",
+  "packages": {
+    "RayNeoWorkspace-v0.8-app.zip": {
+      "bytes": 133462,
+      "sha256": "cf49f1b0c652b6fbbd98dd29f81fcdeb4a117548f359afead652401c01bf6fbb"
+    },
+    "RayNeoWorkspace-v0.8-source.zip": {
+      "bytes": 30030,
+      "sha256": "9ebc5e1cb258c877f2054bacc226a561fc82f7b0768fc60a104959bf0aff75aa"
+    }
+  }
+}
