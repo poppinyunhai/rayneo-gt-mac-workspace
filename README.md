@@ -41,6 +41,11 @@ The app uses the private `CGVirtualDisplay` API, so compatibility may change wit
 
 Download and extract the source, or clone your copy of this repository. Open Terminal in the project folder.
 
+```sh
+git clone https://github.com/poppinyunhai/rayneo-gt-mac-workspace.git
+cd rayneo-gt-mac-workspace
+```
+
 If build tools are not installed:
 
 ```sh

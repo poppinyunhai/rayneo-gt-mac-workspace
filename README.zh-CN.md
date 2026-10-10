@@ -41,6 +41,11 @@
 
 下载并解压源码，或克隆自己的仓库，在项目文件夹打开终端。
 
+```sh
+git clone https://github.com/poppinyunhai/rayneo-gt-mac-workspace.git
+cd rayneo-gt-mac-workspace
+```
+
 没有编译工具时先运行：
 
 ```sh

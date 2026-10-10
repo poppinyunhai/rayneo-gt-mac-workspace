@@ -4,11 +4,11 @@
 
 ## 版本状态
 
-- 稳定基线：`main` / `v0.8` / `e962868`，用户实机验证三屏与原生输入可用。
+- 稳定基线：`baseline/v0.8` / `v0.8` / `e962868`，用户实机验证三屏与原生输入可用。
 - 前一轮开发回退：`v0.9.0-dev` / `dca4124`，生命周期与图标，未实机验收。
-- 当前分支：`fix/v0.10.1-startup-controls`，版本 **0.10.1 开发修复版**。
+- 当前分支：`main`（已跟踪 `origin/main`），版本 **0.10.1 开发修复版**。
 - 0.10.0 已被用户实机发现回归，暂停验收；0.10.1 修复中。Dock 恢复已由用户确认通过，眼镜三屏观看仍需用户确认。不得把开发版标记为完整验收的稳定发布。
-- 原应用/源码 ZIP 和 SHA-256 清单已纳入 Git：`releases/v0.8/`。未推送远程、未发布。
+- 原应用/源码 ZIP 和 SHA-256 清单已纳入 Git：`releases/v0.8/`。源码已按用户要求推送到 `git@github.com:poppinyunhai/rayneo-gt-mac-workspace.git`；未创建 GitHub Release。
 
 
 验收冻结应用包：`releases/v0.10.0-dev/RayNeoWorkspace-v0.10.0-dev-app.zip`，校验清单在同目录 manifest.json，源码回退点为 `v0.10.0-dev`。0.10.0 已收到用户实机回归报告，暂停作为验收版本使用。
@@ -70,4 +70,4 @@ GPU 路径虽有离屏颜色/方向检查，真实 ScreenCaptureKit / SceneKit /
 
 ## 新对话启动指令
 
-> 请读取 HANDOFF.md、README.md、docs/TESTING.md；按需要读取 docs/ARCHITECTURE.md、docs/SIGNING.md 和 docs/PERFORMANCE.md。项目有用户验证的 v0.8 标签（e962868）及前一轮 v0.9.0-dev（dca4124），当前分支 improve/v0.10-recovery-performance 是七项整轮优化后的 0.10.0 开发版，工程检查通过但 GT 实机统一验收尚未完成。先检查 git status/log，接着按验收表与用户测试；不要把开发版当作稳定发布。入口已拆成 Sources/main.swift，默认开发产物 build/dev/RayNeoWorkspace-Dev.app，采用本机项目专用稳定签名。不要覆盖原应用、轮换签名身份、上传签名私钥或同时运行两个版本。必须保留原生鼠标跨屏、键盘和窗口拖拽，不引入鼠标模式或事件映射。设备是 M2 MacBook Air + 雷鸟 GT，跟随模式。协议/历史在 docs/HANDOFF-v0.8.md。未授权刷固件、上传内容、推送远程或发布应用。
+> 请读取 HANDOFF.md、README.md、docs/TESTING.md，并先检查 git status/log。当前 main 为 0.10.1 开发试用版，远程仓库为 git@github.com:poppinyunhai/rayneo-gt-mac-workspace.git。用户已确认眼镜三屏、转头追踪和 Dock 恢复正常；完整生命周期验收仍待继续。v0.8 标签与 baseline/v0.8 保留原稳定基线，v0.10.1-dev 保留本次修复源码回退点。入口 Sources/main.swift，开发产物 build/dev/RayNeoWorkspace-Dev.app；本机专用签名配置不得上传。必须保留原生鼠标、键盘和拖拽，不引入模式或事件映射。设备为 M2 MacBook Air + 雷鸟 GT，跟随模式。源码已获授权推送；后续发布应用或新的远程操作按新任务范围判断。不要刷固件、轮换签名或同时运行两个版本。
