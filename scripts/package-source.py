@@ -9,7 +9,7 @@ import zipfile
 root = Path(__file__).resolve().parents[1]
 prefix = "RayNeoWorkspace-v0.10.1-source-trial"
 output = root / "build" / "exports" / (prefix + ".zip")
-files = [root / "build.sh"]
+files = [root / "build.sh", root / "README.md", root / "README.zh-CN.md"]
 for folder in ("Sources", "Assets", "Tests", "scripts"):
     files += [p for p in (root / folder).rglob("*")
               if p.is_file() and not p.is_symlink()
@@ -18,7 +18,6 @@ for folder in ("Sources", "Assets", "Tests", "scripts"):
 for name in ("FRIEND_TRIAL.md", "ARCHITECTURE.md", "PERFORMANCE.md", "SIGNING.md", "TESTING.md"):
     files.append(root / "docs" / name)
 payload = {p.relative_to(root).as_posix(): p.read_bytes() for p in sorted(set(files))}
-payload["README.md"] = (root / "docs" / "FRIEND_TRIAL.md").read_bytes()
 payload["构建体验版.command"] = b'#!/bin/bash\nset -euo pipefail\ncd "$(dirname "$0")"\nSIGNING_IDENTITY=- bash build.sh\nprintf "\\nBuild complete. Open build/dev/RayNeoWorkspace-Dev.app to start.\\n"\n'
 revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
 manifest = {"version": "0.10.1-dev", "source_commit": revision, "files": {
