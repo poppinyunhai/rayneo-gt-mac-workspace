@@ -136,8 +136,20 @@ import Carbon
         RunLoop.main.add(timer!, forMode: .common)
     }
     @objc func showControls() {
-        guard !CommandLine.arguments.contains("--render-controls") else { return }
+        guard !CommandLine.arguments.contains("--render-controls"), controlWindow != nil else { return }
+        // Always recover onto the Mac, including after display reconfiguration or minimization.
+        if let screen = NSScreen.screens.first(where: { displayID($0).map { CGDisplayIsBuiltin($0) != 0 } ?? false }) ?? NSScreen.screens.first(where: { displayID($0) != outputDisplayID && !virtualDisplays.map(\.displayID).contains(displayID($0) ?? 0) }) {
+            let frame = screen.visibleFrame
+            let size = controlWindow.frame.size
+            controlWindow.setFrameOrigin(NSPoint(x: frame.midX - size.width / 2,
+                                                y: max(frame.minY, frame.midY - size.height / 2)))
+        }
+        if controlWindow.isMiniaturized { controlWindow.deminiaturize(nil) }
         controlWindow.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+    }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showControls()
+        return false
     }
     @objc func recenter() { tracker.recenter() }
     @objc func smallerPanel() { changeScale(-1) }
@@ -212,7 +224,6 @@ import Carbon
             desktopStatus = "当前系统没有可用的虚拟显示器接口"; return
         }
         view.preferredFramesPerSecond = settings.renderFPS
-        view.isPlaying = true
         starting = true; generation += 1
         let ticket = generation
         let sessionSettings = settings
@@ -231,15 +242,29 @@ import Carbon
                     guard display.apply(settings) else { throw NSError(domain: "RayNeo", code: 2, userInfo: [NSLocalizedDescriptionKey: "虚拟屏模式设置失败"]) }
                     virtualDisplays.append(display)
                 }
-                try await Task.sleep(nanoseconds: 1_000_000_000)
+                try await waitForDesktopScreens()
                 guard generation == ticket else { return }
-                // WindowServer needs a run-loop turn to register the new displays.
-                try arrangeDesktops()
-                try await Task.sleep(nanoseconds: 600_000_000)
+                let layoutDeadline = ProcessInfo.processInfo.systemUptime + 8
+                while true {
+                    try Task.checkCancellation()
+                    do { try arrangeDesktops(); break }
+                    catch {
+                        guard ProcessInfo.processInfo.systemUptime < layoutDeadline else { throw error }
+                        try await Task.sleep(nanoseconds: 200_000_000)
+                    }
+                }
+                try await waitForDesktopScreens(requireExtendedLayout: true)
                 guard generation == ticket else { return }
-                if sessionSettings.showTestWindows { createTestWindows() }
+                updateOutputScreen()
+                view.isPlaying = true
+                desktopStatus = "独立桌面已注册，正在启动三路捕获…"
                 let content = try await AsyncDeadline.run(seconds: 8, label: "枚举捕获屏幕") {
-                    try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+                    while true {
+                        try Task.checkCancellation()
+                        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+                        if self.virtualDisplays.allSatisfy({ virtual in content.displays.contains { $0.displayID == virtual.displayID } }) { return content }
+                        try await Task.sleep(nanoseconds: 100_000_000)
+                    }
                 }
                 guard generation == ticket, !Task.isCancelled else { return }
                 for (index, virtual) in virtualDisplays.enumerated() {
@@ -262,17 +287,40 @@ import Carbon
                     try await AsyncDeadline.run(seconds: 8, label: "启动捕获") { try await capture.start(display) }
                     guard generation == ticket, !Task.isCancelled else { return }
                 }
+                // Create content after capture starts so all three streams receive a fresh desktop update.
+                if sessionSettings.showTestWindows { createTestWindows() }
+                desktopStatus = "等待三个桌面的首帧…"
+                try await StartupReadiness.wait(seconds: 8, label: "三个桌面的首帧") {
+                    self.captures.count == 3 && self.captures.allSatisfy { $0.frames > 0 }
+                }
+                guard generation == ticket, !Task.isCancelled else { return }
                 desktopStatus = "三屏已启动，使用原生鼠标。Mac → 左屏 → 中屏 → 右屏，可直接跨屏拖动窗口。"
                 panels.forEach { $0.isHidden = false }
-                hud.isHidden = true
+                view.isPlaying = true
+                hud.isHidden = tracker.calibrated
                 starting = false
                 recovery.succeeded()
+                showControls()
             } catch {
                 guard generation == ticket else { return }
                 let message = error.localizedDescription
                 recovery.startFailed(now: ProcessInfo.processInfo.systemUptime)
                 beginStopping(message: "启动失败：\(message)")
             }
+        }
+    }
+    func waitForDesktopScreens(requireExtendedLayout: Bool = false) async throws {
+        let ids = virtualDisplays.map(\.displayID)
+        try await StartupReadiness.wait(seconds: 8, label: "三个独立桌面注册", stableSeconds: 0.5) {
+            let screens = NSScreen.screens
+            return ids.count == 3 && ids.allSatisfy { id in
+                guard CGDisplayIsOnline(id) != 0, CGDisplayIsActive(id) != 0 else { return false }
+                // Mirrored displays can be online before AppKit exposes separate NSScreens.
+                guard requireExtendedLayout else { return true }
+                guard let screen = screens.first(where: { self.displayID($0) == id }), screen.frame.width > 0 else { return false }
+                return CGDisplayMirrorsDisplay(id) == kCGNullDirectDisplay &&
+                    abs(screen.frame.minX - CGDisplayBounds(id).minX) < 1
+            } && (!requireExtendedLayout || Set(ids.map { Int(CGDisplayBounds($0).minX) }).count == 3)
         }
     }
     func arrangeDesktops() throws {
@@ -375,6 +423,7 @@ import Carbon
             let axis = ["X", "Y", "Z"][yawAxis]
             hud.stringValue = "\(tracker.status) · 样本 \(tracker.samples) · Yaw \(axis)\(direction > 0 ? "+" : "−")\(paused ? " · 已暂停" : "")\n\(desktopStatus)"
             controlStatus?.stringValue = desktopStatus + "\n捕获帧数：" + captures.map { String($0.frames) }.joined(separator: " / ") +
+                " · " + tracker.status + String(format: " · 转头 %.1f°", tracker.angles[yawAxis] * 180 / .pi) +
                 (recovery.failed ? "\n自动重试已暂停，请检查权限或设备后点击启动三屏" : "")
         }
         let now = ProcessInfo.processInfo.systemUptime
@@ -383,11 +432,15 @@ import Carbon
             var status: [String: Any] = ["status": desktopStatus, "imuSamples": tracker.samples,
                                        "virtualIDs": virtualDisplays.map { $0.displayID },
                                        "captureFrames": captures.map { $0.frames }, "inputMode": "native", "displayBounds": virtualDisplays.map { NSStringFromRect(CGDisplayBounds($0.displayID)) }]
-            status["version"] = "0.10.0-dev"
+            status["version"] = "0.10.1-dev"
             status["sessionState"] = stopTask != nil ? "stopping" : starting ? "starting" : virtualDisplays.isEmpty ? "idle" : "running"
             status["recovery"] = ["wanted": recovery.wantsSession, "sleeping": sleeping, "attempts": recovery.attempts, "failed": recovery.failed]
             status["capture"] = captures.map { ["frames": $0.frames, "mergedFrames": $0.dropped, "gpuFrames": $0.gpuFrames, "fallbackFrames": $0.fallbackFrames, "deliveryMS": $0.deliveryMS, "sourceAgeMS": $0.sourceAgeMS] as [String: Any] }
             status["imu"] = ["biasDPS": tracker.integrator.bias, "stationarySeconds": tracker.integrator.stationarySeconds, "rejectedGaps": tracker.integrator.rejectedGaps, "temperature": tracker.integrator.temperature, "yawDegrees": tracker.angles[yawAxis] * 180 / .pi]
+            status["tracking"] = ["calibrated": tracker.calibrated, "status": tracker.status,
+                                  "rawGyroDPS": tracker.integrator.lastGyroDPS,
+                                  "calibrationVariance": tracker.integrator.calibrationVariance,
+                                  "angles": tracker.angles, "axis": yawAxis, "paused": paused]
             status["process"] = diagnostics.sample()
             if let data = try? JSONSerialization.data(withJSONObject: status, options: [.prettyPrinted, .sortedKeys]) {
                 do {

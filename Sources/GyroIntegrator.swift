@@ -27,6 +27,8 @@ struct GyroIntegrator {
     private(set) var stationarySeconds = 0.0
     private(set) var rejectedGaps = 0
     private(set) var temperature = 0.0
+    private(set) var lastGyroDPS = [0.0,0,0]
+    private(set) var calibrationVariance = [0.0,0,0]
     private var previousTime: Double?
     private var previousSpeed = [0.0,0,0]
     private var calibrationStart: Double?
@@ -47,6 +49,7 @@ struct GyroIntegrator {
         guard now.isFinite, sample.gyro.count == 3,
               sample.gyro.allSatisfy({ $0.isFinite && abs($0) < 4000 }) else { return }
         samples += 1
+        lastGyroDPS = sample.gyro
         if sample.temperature.isFinite { temperature = sample.temperature }
         let elapsed = previousTime.map { now - $0 } ?? 0
         previousTime = now
@@ -63,8 +66,11 @@ struct GyroIntegrator {
             if now - (calibrationStart ?? now) >= 2 && count >= 200 {
                 let mean = sums.map { $0 / Double(count) }
                 let variance = (0..<3).map { max(0, squares[$0] / Double(count) - mean[$0] * mean[$0]) }
-                if variance.max() ?? 0 < 0.64 { bias = mean; calibrated = true; previousSpeed = [0,0,0] }
-                else { count = 0; sums = [0,0,0]; squares = [0,0,0]; calibrationStart = nil }
+                calibrationVariance = variance
+                // GT noise exceeded the experimental variance gate on real hardware,
+                // permanently preventing calibration. Preserve v0.8's motion gate;
+                // report variance for measurement instead of blocking head tracking.
+                bias = mean; calibrated = true; previousSpeed = [0,0,0]
             }
             return
         }

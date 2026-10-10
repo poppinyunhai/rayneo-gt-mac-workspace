@@ -42,8 +42,10 @@ final class DisplayLayoutManager {
         defer { if !committed { CGCancelDisplayConfiguration(config) } }
         guard CGConfigureDisplayOrigin(config,output,Int32(rightEdge)+Int32(virtualIDs.count*1920),0) == .success else { throw failure("GT 输出屏位置配置失败") }
         for (i,id) in virtualIDs.enumerated() {
-            if CGDisplayMirrorsDisplay(id) != kCGNullDirectDisplay,
-               CGConfigureDisplayMirrorOfDisplay(config,id,kCGNullDirectDisplay) != .success { throw failure("取消虚拟屏镜像失败") }
+            if CGDisplayMirrorsDisplay(id) != kCGNullDirectDisplay {
+                let result = CGConfigureDisplayMirrorOfDisplay(config,id,kCGNullDirectDisplay)
+                guard result == .success else { throw failure("取消虚拟屏镜像失败 (\(result.rawValue))") }
+            }
             guard CGConfigureDisplayOrigin(config,id,Int32(rightEdge)+Int32(i*1920),0) == .success else { throw failure("虚拟屏位置配置失败") }
         }
         let result=CGCompleteDisplayConfiguration(config,.forSession)

@@ -110,3 +110,7 @@ The Codex execution sandbox blocked HID access and screen enumeration; an approv
 自动检查、离屏 UI/GPU 检查、签名与 CSV 工具检查通过。真实 GT 三屏、更新后授权、拔插/唤醒、功耗/端到端延迟、漂移与阅读效果全部留到统一验收。当前文档以 HANDOFF.md 和 docs/TESTING.md 为准。
 
 最终离屏纹理检查加入中灰/暗灰后发现 plain BGRA Metal 纹理与 CGImage 的颜色空间不同；改用 bgra8Unorm_srgb，并显式指定捕获 sRGB，红蓝/灰阶及方向重新比较通过。不能仅测试饱和红蓝来证明文字灰阶正确。
+
+## 2026-10-10：0.10.1 首次启动与面板恢复修复
+
+用户澄清“卡死”为运行后无法叫出应用窗口。增加 Dock reopen、⌘0 与 Mac 屏定位。固定延时改为在线/活动状态稳定、独立屏布局、三路捕获首帧检查；布局设置暂时失败可限时重试。中间构建首帧检查误放到捕获创建之前，实机发现后已纠正；这些中间构建不交付。原冻结包不覆盖。

@@ -1,0 +1,7 @@
+{
+  "version": "0.10.1-dev",
+  "source_ref": "v0.10.1-dev",
+  "archive": "RayNeoWorkspace-v0.10.1-dev-app.zip",
+  "sha256": "906643d67c5670b52e8c399d2eda0f7f6440ae02f4101665a16f1303d0f589cd",
+  "hardware_acceptance": "partial: Dock confirmed by user; three captures and IMU calibration checked; glasses visual acceptance pending"
+}

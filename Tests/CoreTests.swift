@@ -8,6 +8,18 @@ import Foundation
 }
 @main struct CoreTests {
     @MainActor static func main() async throws {
+        var registered = 1
+        let delayedRegistration = Task { @MainActor in
+            try await Task.sleep(nanoseconds: 150_000_000)
+            registered = 3
+        }
+        try await StartupReadiness.wait(seconds: 1, label: "测试桌面") { registered == 3 }
+        try await delayedRegistration.value
+        precondition(registered == 3)
+        do {
+            try await StartupReadiness.wait(seconds: 0.05, label: "缺失桌面") { false }
+            preconditionFailure("Missing desktop must time out")
+        } catch { precondition(error.localizedDescription.contains("缺失桌面")) }
         let temp=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at:temp) }
         let store=SettingsStore(url:temp.appendingPathComponent("settings.json"))
@@ -44,6 +56,13 @@ import Foundation
         let stationary=IMUSample(gyro:[0.2,-0.1,0],acceleration:[0,0,1],temperature:25)
         for i in 0...220 { gyro.receive(stationary,at:Double(i)/100) }
         precondition(gyro.calibrated && abs(gyro.bias[0]-0.2)<1e-8)
+        var noisyGT = GyroIntegrator()
+        for i in 0...1000 {
+            let noise = i % 2 == 0 ? 0.9 : -0.9
+            noisyGT.receive(IMUSample(gyro:[noise,0,0],acceleration:[0,0,1],temperature:42),at:Double(i)/500)
+        }
+        precondition(noisyGT.calibrated && noisyGT.calibrationVariance[0] > 0.64,
+                     "Real GT noise must not lock all head angles at zero")
         let turning=IMUSample(gyro:[0.2,89.9,0],acceleration:[0,0,1],temperature:25)
         for i in 221...320 { gyro.receive(turning,at:Double(i)/100) }
         precondition(abs(gyro.angles[1]*180 / .pi-89.55)<0.01)

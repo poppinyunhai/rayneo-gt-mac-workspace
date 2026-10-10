@@ -4,6 +4,9 @@ import SceneKit
 extension WorkspaceDelegate {
     func createControls() {
         let menu = NSMenu(), appMenu = NSMenu()
+        let controlsItem = NSMenuItem(title:"显示控制面板",action:#selector(showControls),keyEquivalent:"0")
+        controlsItem.target=self;appMenu.addItem(controlsItem)
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle:"退出 RayNeo Workspace",action:#selector(NSApplication.terminate(_:)),keyEquivalent:"q")
         let item=NSMenuItem();item.submenu=appMenu;menu.addItem(item);NSApp.mainMenu=menu
         statusItem=NSStatusBar.system.statusItem(withLength:NSStatusItem.variableLength)
