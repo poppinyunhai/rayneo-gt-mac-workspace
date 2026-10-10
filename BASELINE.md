@@ -12,7 +12,7 @@
 - `releases/v0.8/RayNeoWorkspace-v0.8-source.zip`：原始源码发布包。
 - `releases/v0.8/manifest.json`：发布包大小和 SHA-256。
 
-保存时两个 ZIP 的完整性与 SHA-256 均通过检查。实机验证范围及未验证事项见 `HANDOFF.md`。
+保存时两个 ZIP 的完整性与 SHA-256 均通过检查。原实机验证范围及未验证事项见 `docs/HANDOFF-v0.8.md`，当前状态见 `HANDOFF.md`。
 
 ## 回退与实验
 

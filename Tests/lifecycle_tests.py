@@ -2,8 +2,8 @@
 from pathlib import Path
 import subprocess, tempfile
 root = Path(__file__).resolve().parents[1]
-source = (root / 'Sources/WorkspaceDemo.swift').read_text()
-cleanup = source[source.index('    @objc private func stopDesktops()'):source.index('    private func createTestWindows()')].replace('@objc ', '').replace('private func', 'func')
+source = (root / 'Sources/WorkspaceDelegate.swift').read_text()
+cleanup = source[source.index('    @objc func stopDesktops()'):source.index('    func createTestWindows()')].replace('@objc ', '').replace('private func', 'func')
 termination = source[source.index('    func applicationShouldTerminate('):source.index('    func applicationWillTerminate(')]
 harness = r'''
 import Foundation
@@ -19,6 +19,7 @@ import Foundation
     var stopCalls = 0
     let gate: Gate
     init(_ gate: Gate) { self.gate = gate }
+    func invalidate() { onFrame=nil;onError=nil }
     func stop() async -> String? { stopCalls += 1; await gate.wait(); return nil }
 }
 final class Material { var diffuse = Diffuse() }
@@ -29,6 +30,13 @@ final class HUD { var isHidden = true }
 final class Window { func close() {} }
 final class Tracker { var stops = 0; func stop() { stops += 1 } }
 final class TestTimer { func invalidate() {} }
+final class FakeView { var isPlaying=true }
+final class Benchmark { func stop() {} }
+final class Layout {
+    var restores=0
+    var error:String?
+    func restore() -> String? { restores += 1;return error }
+}
 enum NSColor { static let black = 0 }
 @MainActor final class NSApplication {
     enum TerminateReply { case terminateLater }
@@ -49,8 +57,11 @@ enum NSColor { static let black = 0 }
     var hud: HUD? = HUD()
     var tracker = Tracker()
     var timer: TestTimer?
-    var restores = 0
-    func restoreOutputOrigin() { restores += 1 }
+    var recovery=RecoveryPolicy()
+    var layoutManager=Layout()
+    var retainedFrames:[Int?]=[nil,nil,nil]
+    var benchmark=Benchmark()
+    var view:FakeView?=FakeView()
 ''' + cleanup + termination + r'''
 }
 @main struct Tests {
@@ -66,9 +77,9 @@ enum NSColor { static let black = 0 }
         precondition(h.generation == 1 && capture.stopCalls == 0)
         precondition(h.virtualDisplays.count == 3 && capture.onFrame == nil && capture.onError == nil)
         start.open(); await settle()
-        precondition(capture.stopCalls == 1 && h.restores == 0 && h.virtualDisplays.count == 3)
+        precondition(capture.stopCalls == 1 && h.layoutManager.restores == 0 && h.virtualDisplays.count == 3)
         captureStop.open(); await h.stopTask?.value
-        precondition(h.virtualDisplays.isEmpty && h.captures.isEmpty && h.restores == 1 && h.stopTask == nil)
+        precondition(h.virtualDisplays.isEmpty && h.captures.isEmpty && h.layoutManager.restores == 1 && h.stopTask == nil)
         // Quit while cleanup is already active: one cleanup, reply only after completion.
         let stop = Gate(), q = Harness(), app = NSApplication()
         q.captures = [Capture(stop)]
@@ -84,7 +95,17 @@ enum NSColor { static let black = 0 }
         empty.virtualDisplays = []; empty.panels = []; empty.hud = nil
         _ = empty.applicationShouldTerminate(emptyApp); await settle()
         precondition(emptyApp.replies == 1)
-        print("PASS: startup cancellation, duplicate stop, resource ordering, quit during cleanup, uninitialized quit")
+        // A startup operation that ignores cancellation must not hold cleanup indefinitely.
+        let stuck=Gate(), timeoutHarness=Harness()
+        timeoutHarness.startupTask=Task { await stuck.wait() }
+        await settle();timeoutHarness.beginStopping(message:"stopped")
+        await timeoutHarness.stopTask?.value
+        precondition(timeoutHarness.virtualDisplays.isEmpty && timeoutHarness.desktopStatus.contains("超时"))
+        stuck.open()
+        let failedLayout=Harness();failedLayout.layoutManager.error="布局恢复失败"
+        failedLayout.stopDesktops();await failedLayout.stopTask?.value
+        precondition(failedLayout.desktopStatus.contains("布局恢复失败"))
+        print("PASS: startup cancellation, duplicate stop, resource ordering, quit during cleanup, uninitialized quit, hung startup timeout, layout errors")
     }
 }
 '''
@@ -92,5 +113,5 @@ with tempfile.TemporaryDirectory(prefix='rayneo-lifecycle-') as temp:
     path = Path(temp) / 'LifecycleTests.swift'
     path.write_text(harness)
     binary = Path(temp) / 'tests'
-    subprocess.run(['xcrun','swiftc','-parse-as-library','-module-cache-path','/private/tmp/rayneo-swift-cache',str(path),'-o',str(binary)],check=True)
+    subprocess.run(['xcrun','swiftc','-parse-as-library','-module-cache-path','/private/tmp/rayneo-swift-cache',str(root/'Sources/WorkspaceSettings.swift'),str(root/'Sources/AsyncDeadline.swift'),str(path),'-o',str(binary)],check=True)
     subprocess.run([str(binary)],check=True,timeout=20)

@@ -1,0 +1,23 @@
+{
+  "version": "0.10.0-dev",
+  "date": "2026-10-10",
+  "source_ref": "v0.10.0-dev",
+  "hardware_acceptance": "pending",
+  "bundle_id": "local.rayneo.workspace.dev",
+  "signing_requirement": "designated => identifier \"local.rayneo.workspace.dev\" and certificate leaf = H\"a4858682bdf01a2ad4cc9d6c23e9f8ff275d3019\"",
+  "checks": [
+    "optimized build",
+    "core and lifecycle tests",
+    "offscreen Metal color/grayscale/orientation",
+    "offscreen controls layout",
+    "signature integrity and stable requirement",
+    "metadata tamper detection",
+    "telemetry CSV fixture"
+  ],
+  "packages": {
+    "RayNeoWorkspace-v0.10.0-dev-app.zip": {
+      "bytes": 364445,
+      "sha256": "b5392453e20009168c4b4541472910fa6e38f38c791beae74e643131f8251381"
+    }
+  }
+}

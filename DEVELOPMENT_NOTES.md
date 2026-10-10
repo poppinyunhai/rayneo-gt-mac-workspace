@@ -98,3 +98,15 @@ The Codex execution sandbox blocked HID access and screen enumeration; an approv
 保存 v0.8 到 main 和带注释标签 v0.8（e962868），原发布 ZIP 与校验清单一起纳入 Git。开发工作在 improve/v0.9-lifecycle-icon；独立开发应用身份和 build/dev 输出路径避免覆盖基线。
 
 新增启动任务取消与等待、停止任务去重、捕获停止后再释放显示器、旧错误回调会话校验、系统等待清理后退出，以及原创三屏图标。构建和生命周期测试通过；真实设备验收仍待完成，步骤见 docs/TESTING.md。当前接续工作以 HANDOFF.md 为准，原交接位于 docs/HANDOFF-v0.8.md。
+
+## 2026-10-10：v0.10.0 七项整轮优化
+
+用户要求七项一起完成后统一验收。建立 improve/v0.10-recovery-performance，先保存 v0.9.0-dev 回退标签。工程已拆分，入口改为 Sources/main.swift。
+
+实现热拔插/睡眠恢复与有限自动重试、有限时清理和持久布局恢复、专用本地稳定签名、设置保存和新面板、Metal 纹理/最新帧合并/动态负载与诊断 CSV，以及校准方差、梯形积分、采样间断与可关闭的静止零偏修正。原生输入和运行时 IMU 指令白名单保留。
+
+本机现有签名身份在沙箱外可见，但证书已过期，因此没有复用；新专用钥匙串加入用户搜索列表，保留其他条目，不更改默认钥匙串。签名配置和私钥排除在 Git 外。Metal 在沙箱内不可用，沙箱外离屏合成纹理测试通过；该差异不能用于推断产品必须提权。
+
+自动检查、离屏 UI/GPU 检查、签名与 CSV 工具检查通过。真实 GT 三屏、更新后授权、拔插/唤醒、功耗/端到端延迟、漂移与阅读效果全部留到统一验收。当前文档以 HANDOFF.md 和 docs/TESTING.md 为准。
+
+最终离屏纹理检查加入中灰/暗灰后发现 plain BGRA Metal 纹理与 CGImage 的颜色空间不同；改用 bgra8Unorm_srgb，并显式指定捕获 sRGB，红蓝/灰阶及方向重新比较通过。不能仅测试饱和红蓝来证明文字灰阶正确。
