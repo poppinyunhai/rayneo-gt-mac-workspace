@@ -92,3 +92,9 @@ The Codex execution sandbox blocked HID access and screen enumeration; an approv
 - https://github.com/verncat/RayNeo-Air-3S-Pro-OpenVR/blob/main/src/RayneoApi.cpp
 - https://github.com/Fuzzy-Team/virtual-monitor-helper/blob/main/CGVirtualDisplayPrivate.h
 - https://github.com/enfp-dev-studio/node-mac-virtual-display/blob/main/src/virtual_display.mm
+
+## 2026-10-10：独立 Git 基线与 v0.9.0 开发优化
+
+保存 v0.8 到 main 和带注释标签 v0.8（e962868），原发布 ZIP 与校验清单一起纳入 Git。开发工作在 improve/v0.9-lifecycle-icon；独立开发应用身份和 build/dev 输出路径避免覆盖基线。
+
+新增启动任务取消与等待、停止任务去重、捕获停止后再释放显示器、旧错误回调会话校验、系统等待清理后退出，以及原创三屏图标。构建和生命周期测试通过；真实设备验收仍待完成，步骤见 docs/TESTING.md。当前接续工作以 HANDOFF.md 为准，原交接位于 docs/HANDOFF-v0.8.md。

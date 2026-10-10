@@ -53,7 +53,12 @@ final class DesktopCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
         try await stream.startCapture()
     }
-    func stop() async { try? await stream?.stopCapture(); stream = nil }
+    func stop() async -> String? {
+        guard let active = stream else { return nil }
+        defer { stream = nil }
+        do { try await active.stopCapture(); return nil }
+        catch { return error.localizedDescription }
+    }
     func stream(_ stream: SCStream, didStopWithError error: Error) {
         DispatchQueue.main.async { [weak self] in self?.onError?(error.localizedDescription) }
     }
@@ -187,6 +192,9 @@ final class DemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var panels: [SCNNode] = []
     private var virtualDisplays: [CGVirtualDisplay] = []
     private var captures: [DesktopCapture] = []
+    private var startupTask: Task<Void, Never>?
+    private var stopTask: Task<Void, Never>?
+    private var terminating = false
     private var generation = 0
     private var desktopStatus = "尚未启动独立虚拟屏"
     private var starting = false
@@ -424,7 +432,7 @@ final class DemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.setFrame(screen.frame, display: true)
     }
     @objc private func startDesktops() {
-        guard !starting, virtualDisplays.isEmpty else { return }
+        guard !terminating, stopTask == nil, !starting, virtualDisplays.isEmpty else { return }
         guard CGPreflightScreenCaptureAccess() else {
             _ = CGRequestScreenCaptureAccess()
             desktopStatus = "请在系统设置 → 隐私与安全性 → 屏幕与系统音频录制中允许 RayNeo Workspace。若系统要求，请退出并重新打开，再点击启动三屏。"
@@ -437,7 +445,7 @@ final class DemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         starting = true; generation += 1
         let ticket = generation
         desktopStatus = "正在创建三个独立桌面…"
-        Task { @MainActor [self] in
+        startupTask = Task { @MainActor [self] in
             do {
                 for (i, name) in ["RayNeo Left", "RayNeo Center", "RayNeo Right"].enumerated() {
                     let descriptor = CGVirtualDisplayDescriptor()
@@ -459,6 +467,7 @@ final class DemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 guard generation == ticket else { return }
                 createTestWindows()
                 let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+                guard generation == ticket, !Task.isCancelled else { return }
                 for (index, virtual) in virtualDisplays.enumerated() {
                     guard generation == ticket else { return }
                     guard let display = content.displays.first(where: { $0.displayID == virtual.displayID }) else {
@@ -469,9 +478,13 @@ final class DemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                         guard let self, self.generation == ticket else { return }
                         self.panels[index].geometry?.firstMaterial?.diffuse.contents = image
                     }
-                    capture.onError = { [weak self] error in self?.desktopStatus = "捕获停止：\(error)" }
+                    capture.onError = { [weak self] error in
+                        guard let self, self.generation == ticket else { return }
+                        self.beginStopping(message: "捕获停止：\(error)；请重新启动三屏")
+                    }
                     captures.append(capture)
                     try await capture.start(display)
+                    guard generation == ticket, !Task.isCancelled else { return }
                 }
                 desktopStatus = "三屏已启动，使用原生鼠标。Mac → 左屏 → 中屏 → 右屏，可直接跨屏拖动窗口。"
                 panels.forEach { $0.isHidden = false }
@@ -480,8 +493,7 @@ final class DemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             } catch {
                 guard generation == ticket else { return }
                 let message = error.localizedDescription
-                stopDesktops()
-                desktopStatus = "启动失败：\(message)"
+                beginStopping(message: "启动失败：\(message)")
             }
         }
     }
@@ -529,16 +541,39 @@ final class DemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if CGCompleteDisplayConfiguration(config, .forSession) == .success { originalGTOrigin = nil }
     }
     @objc private func stopDesktops() {
-        restoreOutputOrigin()
-        generation += 1; starting = false
-        let old = captures; captures = []
-        old.forEach { $0.onFrame = nil; $0.onError = nil }
-        Task { for capture in old { await capture.stop() } }
-        testWindows.forEach { $0.close() }; testWindows.removeAll()
-        virtualDisplays.removeAll()
-        panels.forEach { $0.isHidden = true }
-        hud?.isHidden = false
-        desktopStatus = "三个虚拟屏已移除；可以重新启动"
+        beginStopping(message: "三个虚拟屏已移除；可以重新启动")
+    }
+    private func beginStopping(message: String) {
+        guard stopTask == nil else { return }
+        generation += 1
+        starting = false
+        let pendingStart = startupTask
+        pendingStart?.cancel()
+        captures.forEach { $0.onFrame = nil; $0.onError = nil }
+        desktopStatus = "正在停止捕获并恢复桌面布局…"
+        stopTask = Task { @MainActor [self] in
+            // A pending startCapture must finish before stopCapture and display release.
+            await pendingStart?.value
+            startupTask = nil
+            let old = captures
+            old.forEach { $0.onFrame = nil; $0.onError = nil }
+            var errors: [String] = []
+            for capture in old {
+                if let error = await capture.stop() { errors.append(error) }
+            }
+            captures.removeAll()
+            restoreOutputOrigin()
+            testWindows.forEach { $0.close() }; testWindows.removeAll()
+            virtualDisplays.removeAll()
+            panels.forEach {
+                $0.isHidden = true
+                $0.geometry?.firstMaterial?.diffuse.contents = NSColor.black
+            }
+            hud?.isHidden = false
+            desktopStatus = message
+            if !errors.isEmpty { desktopStatus += "；捕获清理错误：" + errors.joined(separator: " / ") }
+            stopTask = nil
+        }
     }
     private func createTestWindows() {
         for (index, display) in virtualDisplays.enumerated() {
@@ -585,7 +620,24 @@ final class DemoDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         }
     }
-    func applicationWillTerminate(_ notification: Notification) { timer?.invalidate(); stopDesktops(); tracker.stop() }
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !terminating else { return .terminateLater }
+        terminating = true
+        stopDesktops()
+        let cleanup = stopTask
+        Task { @MainActor [self] in
+            await cleanup?.value
+            tracker.stop()
+            timer?.invalidate()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+    func applicationWillTerminate(_ notification: Notification) {
+        timer?.invalidate()
+        tracker.stop()
+        NotificationCenter.default.removeObserver(self)
+    }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 }
 

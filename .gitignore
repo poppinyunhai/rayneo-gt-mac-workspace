@@ -4,3 +4,4 @@ probes/passive_probe
 probes/imu_probe
 probes/virtual_display_probe
 .DS_Store
+Assets/AppIcon.iconset/
